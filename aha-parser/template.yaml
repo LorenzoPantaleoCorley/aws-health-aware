@@ -1,0 +1,173 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  aha-parser
+
+  Sample SAM Template for aha-parser
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+
+Parameters:
+  Regions:
+    Description: >-
+      By default, AHA reports events affecting all AWS regions. 
+      If you want to report on certain regions you can enter up to 10 in a comma separated format.
+      Available Regions: us-east-1,us-east-2,us-west-1,us-west-2,af-south-1,ap-east-1,ap-south-1,ap-northeast-3,
+      ap-northeast-2,ap-southeast-1,ap-southeast-2,ap-northeast-1,ca-central-1,eu-central-1,eu-west-1,eu-west-2,
+      eu-south-1,eu-south-3,eu-north-1,me-south-1,sa-east-1,global
+    Default: all regions
+    AllowedPattern: ".+"
+    ConstraintDescription: No regions were entered, please read the documentation about selecting all regions or filtering on some.
+    Type: String
+  AccountIDs:
+    Description: >-
+      If you would like to EXCLUDE any accounts from alerting, upload a .csv file of comma-seperated account numbers to the same S3 bucket 
+      where the AHA.zip package is located. Sample AccountIDs file name: aha_account_ids.csv. If not, leave the default of None.
+    Default: None
+    Type: String
+    AllowedPattern: (None)|(.+(\.csv))$    
+  EventSearchBack:
+    Description: How far back to search for events in hours. Default is 1 hour
+    Default: '1'
+    Type: Number
+  FromEmail:
+    Description: Enter FROM Email Address
+    Type: String
+    Default: none@domain.com
+    AllowedPattern: ^([\w+-.%]+@[\w-.]+\.[A-Za-z]+)(, ?[\w+-.%]+@[\w-.]+\.[A-Za-z]+)*$
+    ConstraintDescription: 'FromEmail is not a valid, please verify entry. If not sending to email, leave as the default, none@domain.com.'
+  ToEmail:
+    Description: >-
+      Enter email addresses separated by commas (for ex: abc@amazon.com,
+      bcd@amazon.com)
+    Type: String
+    Default: none@domain.com
+    AllowedPattern: ^([\w+-.%]+@[\w-.]+\.[A-Za-z]+)(, ?[\w+-.%]+@[\w-.]+\.[A-Za-z]+)*$
+    ConstraintDescription: 'ToEmail is not a valid, please verify entry. If not sending to email, leave as the default, none@domain.com.'   
+  Subject:
+    Description: Enter the subject of the email address
+    Type: String
+    Default: AWS Health Alert
+  S3Bucket:
+    Description: >-
+      Name of your S3 Bucket where the AHA Package .zip resides. Just the name
+      of the bucket (e.g. my-s3-bucket)
+    Type: String
+  AWSHealthEventType:
+    Description: >-
+      Select the event type that you want AHA to report on. Refer to
+      https://docs.aws.amazon.com/health/latest/APIReference/API_EventType.html for more information on EventType.
+    Default: 'issue | accountNotification | scheduledChange'
+    AllowedValues:
+      - 'issue | accountNotification | scheduledChange'
+      - 'issue'
+    Type: String
+
+Resources:
+  LambdaFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: parser/
+      Handler: notification-parser.main
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          ACCOUNT_IDS:
+            Ref: AccountIDs        
+          REGIONS:
+            Ref: Regions
+          # AWS_REGION:
+          #   eu-central-1
+          S3_BUCKET:
+            Ref: S3Bucket            
+          FROM_EMAIL:
+            Ref: FromEmail
+          TO_EMAIL:
+            Ref: ToEmail
+          EMAIL_SUBJECT:
+            Ref: Subject
+          EVENT_SEARCH_BACK:
+            Ref: EventSearchBack
+          HEALTH_EVENT_TYPE:
+            Ref: AWSHealthEventType
+      MemorySize: 128
+      Tags:
+        map-migrated: d-server-00lmoisudlfo3c
+        business:abbreviation: AHA
+      Timeout: 300
+      Description: Lambda function to parse the notification event and send alert email
+      Policies:
+        - Statement:
+            - Sid: AllowOrg
+              Effect: Allow
+              Action:
+                - organizations:Describe*
+                - organizations:List*
+              Resource: '*'
+        - Statement:
+            - Sid: AllowCWLogs
+              Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: 
+                - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+        - Statement:
+            - Sid: AllowSES
+              Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: 
+                - !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:*'
+        - Statement:
+            - Sid: AllowS3Put
+              Effect: Allow
+              Action:
+                - events:DescribeRule
+                - events:ListApiDestinations
+                - events:ListReplays
+                - events:ListConnections
+                - events:DescribePartnerEventSource
+                - events:DescribeConnection
+                - events:DescribeEventSource
+                - events:ListEventBuses
+                - events:ListArchives
+                - events:TestEventPattern
+                - events:DescribeEventBus
+                - events:ListPartnerEventSourceAccounts
+                - events:ListEndpoints
+                - events:ListRuleNamesByTarget
+                - events:ListPartnerEventSources
+                - events:DescribeReplay
+                - events:ListEventSources
+                - events:DescribeArchive
+                - events:DescribeEndpoint
+                - events:ListTagsForResource
+                - events:ListRules
+                - events:ListTargetsByRule
+                - events:DescribeApiDestination
+              Resource: 
+                - !GetAtt EventBus.Arn
+      # Events:
+      #   HelloWorld:
+      #     Type: Api 
+      #     Properties:
+      #       Path: /hello
+      #       Method: get
+
+  EventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: fw-aha-event-bus-e1
+      Tags:
+        - Key: business:abbreviation
+          Value: AHA
+        - Key: map-migrated
+          Value: d-server-00lmoisudlfo3c

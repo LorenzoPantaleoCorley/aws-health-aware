@@ -30,10 +30,6 @@ parent_ids = ['ou-37bl-nuoyhcb5','ou-37bl-b7dao3w9']
 
 def main(event, context):
 
-  # get non-organizational view requirements
-  affected_accounts = get_health_accounts(health_client, event, event_arn)
-  affected_entities = get_affected_entities(health_client, event_arn, affected_accounts, is_org_mode = False)
-
   # get event details
   health_client = get_sts_token('health')
   event_arn = event['arn']
@@ -43,6 +39,10 @@ def main(event, context):
   status_code = event['statusCode']
   event_details = json.dumps(describe_event_details(health_client, event_arn), default=myconverter)
   event_details = json.loads(event_details)
+
+  # get non-organizational view requirements
+  affected_accounts = get_health_accounts(health_client, event, event_arn)
+  affected_entities = get_affected_entities(health_client, event_arn, affected_accounts, is_org_mode = False)
 
   for parent_id in parent_ids:
     for child_account in get_accounts_recursive(parent_id):
@@ -81,18 +81,6 @@ def get_accounts_recursive(parent_id):
       accounts += get_accounts_recursive(ou['Id'])
   return accounts
 
-def get_resources_from_entities(affected_entity_array):
-    
-    resources = []
-    
-    for entity in affected_entity_array:
-        if entity['entityValue'] == "UNKNOWN":
-            #UNKNOWN indicates a public/non-accountspecific event, no resources
-            pass
-        elif entity['entityValue'] != "AWS_ACCOUNT" and entity['entityValue'] != entity['awsAccountId']:
-            resources.append(entity['entityValue'])
-    return resources
-
 def send_email(event_details, eventType, affected_accounts, affected_entities):
   BODY_HTML = get_message_for_email(event_details, eventType, affected_accounts, affected_entities)
   client = boto3.client('ses', region_name='eu-central-1')
@@ -114,6 +102,18 @@ def send_email(event_details, eventType, affected_accounts, affected_entities):
     },
   )
 
+def get_resources_from_entities(affected_entity_array):
+    
+    resources = []
+    
+    for entity in affected_entity_array:
+        if entity['entityValue'] == "UNKNOWN":
+            #UNKNOWN indicates a public/non-accountspecific event, no resources
+            pass
+        elif entity['entityValue'] != "AWS_ACCOUNT" and entity['entityValue'] != entity['awsAccountId']:
+            resources.append(entity['entityValue'])
+    return resources
+
 def myconverter(json_object):
     if isinstance(json_object, datetime):
         return json_object.__str__()
@@ -128,7 +128,7 @@ config = Config(
     )
 )
 def get_sts_token(service):
-    assumeRoleArn = get_secrets()["ahaassumerole"]
+    assumeRoleArn = os.environ['ASSUME_ROLE_ARN']
     boto3_client = None
     
     if "arn:aws:iam::" in assumeRoleArn:
@@ -166,116 +166,113 @@ def get_sts_token(service):
     
     return boto3_client
 
-def get_secrets():
-    secret_teams_name = "MicrosoftChannelID"
-    secret_slack_name = "SlackChannelID"
-    secret_chime_name = "ChimeChannelID"
-    region_name = os.environ['AWS_REGION']
-    get_secret_value_response_assumerole = ""
-    get_secret_value_response_eventbus = ""
-    get_secret_value_response_chime = ""
-    get_secret_value_response_teams = ""
-    get_secret_value_response_slack = ""
-    event_bus_name = "EventBusName"
-    secret_assumerole_name = "AssumeRoleArn" 
+# def get_secrets():
+#     region_name = os.environ['AWS_REGION']
+#     get_secret_value_response_assumerole = ""
+#     get_secret_value_response_eventbus = ""
+#     get_secret_value_response_chime = ""
+#     get_secret_value_response_teams = ""
+#     get_secret_value_response_slack = ""
+#     event_bus_name = "EventBusName"
+#     secret_assumerole_name = "AssumeRoleArn" 
 
-    # create a Secrets Manager client
-    session = boto3.session.Session()
-    client = session.client(
-        service_name='secretsmanager',
-        region_name=region_name
-    )
-    # Iteration through the configured AWS Secrets
-    try:
-        get_secret_value_response_teams = client.get_secret_value(
-            SecretId=secret_teams_name
-        )
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'AccessDeniedException':
-            print("No AWS Secret configured for Teams, skipping")
-            teams_channel_id = "None"
-        else: 
-            print("There was an error with the Teams secret: ",e.response)
-            teams_channel_id = "None"
-    finally:
-        if 'SecretString' in get_secret_value_response_teams:
-            teams_channel_id = get_secret_value_response_teams['SecretString']
-        else:
-            teams_channel_id = "None"
-    try:
-        get_secret_value_response_slack = client.get_secret_value(
-            SecretId=secret_slack_name
-        )
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'AccessDeniedException':
-            print("No AWS Secret configured for Slack, skipping")
-            slack_channel_id = "None"
-        else:    
-            print("There was an error with the Slack secret: ",e.response)
-            slack_channel_id = "None"
-    finally:
-        if 'SecretString' in get_secret_value_response_slack:
-            slack_channel_id = get_secret_value_response_slack['SecretString']
-        else:
-            slack_channel_id = "None"
-    try:
-        get_secret_value_response_chime = client.get_secret_value(
-            SecretId=secret_chime_name
-        )
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'AccessDeniedException':
-            print("No AWS Secret configured for Chime, skipping")
-            chime_channel_id = "None"
-        else:    
-            print("There was an error with the Chime secret: ",e.response)
-            chime_channel_id = "None"
-    finally:
-        if 'SecretString' in get_secret_value_response_chime:
-            chime_channel_id = get_secret_value_response_chime['SecretString']
-        else:
-            chime_channel_id = "None"
-    try:
-        get_secret_value_response_assumerole = client.get_secret_value(
-            SecretId=secret_assumerole_name
-        )
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'AccessDeniedException':
-            print("No AWS Secret configured for Assume Role, skipping")
-            assumerole_channel_id = "None"
-        else:    
-            print("There was an error with the Assume Role secret: ",e.response)
-            assumerole_channel_id = "None"
-    finally:
-        if 'SecretString' in get_secret_value_response_assumerole:
-            assumerole_channel_id = get_secret_value_response_assumerole['SecretString']
-        else:
-            assumerole_channel_id = "None"    
-    try:
-        get_secret_value_response_eventbus = client.get_secret_value(
-            SecretId=event_bus_name
-        )
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'AccessDeniedException':
-            print("No AWS Secret configured for EventBridge, skipping")
-            eventbus_channel_id = "None"
-        else:    
-            print("There was an error with the EventBridge secret: ",e.response)
-            eventbus_channel_id = "None"
-    finally:
-        if 'SecretString' in get_secret_value_response_eventbus:
-            eventbus_channel_id = get_secret_value_response_eventbus['SecretString']
-        else:
-            eventbus_channel_id = "None"            
-        secrets = {
-            "teams": teams_channel_id,
-            "slack": slack_channel_id,
-            "chime": chime_channel_id,
-            "eventbusname": eventbus_channel_id,
-            "ahaassumerole": assumerole_channel_id
-        }    
-        # uncomment below to verify secrets values
-        #print("Secrets: ",secrets)   
-    return secrets
+#     # create a Secrets Manager client
+#     session = boto3.session.Session()
+#     client = session.client(
+#         service_name='secretsmanager',
+#         region_name=region_name
+#     )
+#     # Iteration through the configured AWS Secrets
+#     try:
+#         get_secret_value_response_teams = client.get_secret_value(
+#             SecretId=secret_teams_name
+#         )
+#     except ClientError as e:
+#         if e.response['Error']['Code'] == 'AccessDeniedException':
+#             print("No AWS Secret configured for Teams, skipping")
+#             teams_channel_id = "None"
+#         else: 
+#             print("There was an error with the Teams secret: ",e.response)
+#             teams_channel_id = "None"
+#     finally:
+#         if 'SecretString' in get_secret_value_response_teams:
+#             teams_channel_id = get_secret_value_response_teams['SecretString']
+#         else:
+#             teams_channel_id = "None"
+#     try:
+#         get_secret_value_response_slack = client.get_secret_value(
+#             SecretId=secret_slack_name
+#         )
+#     except ClientError as e:
+#         if e.response['Error']['Code'] == 'AccessDeniedException':
+#             print("No AWS Secret configured for Slack, skipping")
+#             slack_channel_id = "None"
+#         else:    
+#             print("There was an error with the Slack secret: ",e.response)
+#             slack_channel_id = "None"
+#     finally:
+#         if 'SecretString' in get_secret_value_response_slack:
+#             slack_channel_id = get_secret_value_response_slack['SecretString']
+#         else:
+#             slack_channel_id = "None"
+#     try:
+#         get_secret_value_response_chime = client.get_secret_value(
+#             SecretId=secret_chime_name
+#         )
+#     except ClientError as e:
+#         if e.response['Error']['Code'] == 'AccessDeniedException':
+#             print("No AWS Secret configured for Chime, skipping")
+#             chime_channel_id = "None"
+#         else:    
+#             print("There was an error with the Chime secret: ",e.response)
+#             chime_channel_id = "None"
+#     finally:
+#         if 'SecretString' in get_secret_value_response_chime:
+#             chime_channel_id = get_secret_value_response_chime['SecretString']
+#         else:
+#             chime_channel_id = "None"
+#     try:
+#         get_secret_value_response_assumerole = client.get_secret_value(
+#             SecretId=secret_assumerole_name
+#         )
+#     except ClientError as e:
+#         if e.response['Error']['Code'] == 'AccessDeniedException':
+#             print("No AWS Secret configured for Assume Role, skipping")
+#             assumerole_channel_id = "None"
+#         else:    
+#             print("There was an error with the Assume Role secret: ",e.response)
+#             assumerole_channel_id = "None"
+#     finally:
+#         if 'SecretString' in get_secret_value_response_assumerole:
+#             assumerole_channel_id = get_secret_value_response_assumerole['SecretString']
+#         else:
+#             assumerole_channel_id = "None"    
+#     try:
+#         get_secret_value_response_eventbus = client.get_secret_value(
+#             SecretId=event_bus_name
+#         )
+#     except ClientError as e:
+#         if e.response['Error']['Code'] == 'AccessDeniedException':
+#             print("No AWS Secret configured for EventBridge, skipping")
+#             eventbus_channel_id = "None"
+#         else:    
+#             print("There was an error with the EventBridge secret: ",e.response)
+#             eventbus_channel_id = "None"
+#     finally:
+#         if 'SecretString' in get_secret_value_response_eventbus:
+#             eventbus_channel_id = get_secret_value_response_eventbus['SecretString']
+#         else:
+#             eventbus_channel_id = "None"            
+#         secrets = {
+#             "teams": teams_channel_id,
+#             "slack": slack_channel_id,
+#             "chime": chime_channel_id,
+#             "eventbusname": eventbus_channel_id,
+#             "ahaassumerole": assumerole_channel_id
+#         }    
+#         # uncomment below to verify secrets values
+#         #print("Secrets: ",secrets)   
+#     return secrets
 
 def describe_event_details(health_client, event_arn):
     response = health_client.describe_event_details(

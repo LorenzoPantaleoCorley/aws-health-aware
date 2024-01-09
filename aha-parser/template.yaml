@@ -27,6 +27,10 @@ Parameters:
   AssumeRoleArn:
     Description: Role to be assumed to access AWS services via STS
     Type: String
+  EventSearchBack:
+    Description: How far back to search for events in hours. Default is 1 hour
+    Default: '1'
+    Type: Number
 
 Resources:
   LambdaFunction:
@@ -47,6 +51,8 @@ Resources:
             Ref: Subject
           ASSUME_ROLE_ARN:
             Ref: AssumeRoleArn
+          EVENT_SEARCH_BACK:
+            Ref: EventSearchBack
       Tags:
         map-migrated: d-server-00lmoisudlfo3c
         business:abbreviation: AHA

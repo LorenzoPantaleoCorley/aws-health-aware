@@ -1,7 +1,7 @@
 import boto3, os, json
 from messagegenerator import get_message_for_email
 from urllib.request import URLError, HTTPError
-from datetime import datetime
+from datetime import datetime, timedelta
 from botocore.config import Config
 import socket
 # query active health API endpoint
@@ -29,49 +29,66 @@ def main(event, context):
   # event_arn = event['arn']
   # account_id = event_details['successfulSet'][0]['awsAccountId']
   # status_code = event['statusCode']
-  event_arn = event['successfulSet'][0]['event']['arn']
-  event_details = json.dumps(describe_event_details(health_client, event_arn), default=myconverter)
-  event_details = json.loads(event_details)
-  account_id = event['successfulSet'][0]['awsAccountId']
-  status_code = event['successfulSet'][0]['event']['statusCode']
-  event_details = json.dumps(describe_event_details(health_client, event_arn), default=myconverter)
-  event_details = json.loads(event_details)
 
-  # get non-organizational view requirements
-  affected_accounts = get_health_accounts(health_client, event, event_arn)
-  affected_entities = get_affected_entities(health_client, event_arn, affected_accounts, is_org_mode = False)
+  delta_hours = os.environ["EVENT_SEARCH_BACK"]
+  delta_hours = int(delta_hours)
+  time_delta = datetime.now() - timedelta(hours=delta_hours)
+  str_filter = {"lastUpdatedTimes": [{"from": time_delta}]}
+  event_paginator = health_client.get_paginator("describe_events")
+  event_page_iterator = event_paginator.paginate(filter=str_filter)
+  for response in event_page_iterator:
+      events = response.get("events", [])
+      aws_events = json.dumps(events, default=myconverter)
+      aws_events = json.loads(aws_events)
+      print("Event(s) Received: ", json.dumps(aws_events))
+      if len(aws_events) > 0:  # if there are new event(s) from AWS
+          for event in aws_events:
 
-  for parent_id in parent_ids:
-    for child_account in get_accounts_recursive(parent_id):
-      if status_code != "closed":
-        event_type = "create"
-      else:
-        event_type="resolve"
-      child_account_id = child_account['Id']
-      if child_account_id == account_id:
-        if "none@domain.com" not in SENDER and RECIPIENT:
-          try:
-            print("Sending the alert to the emails")
-            #get the list of resources from the array of affected entities
+            event_arn = event['successfulSet'][0]['event']['arn']
+            event_details = json.dumps(describe_event_details(health_client, event_arn), default=myconverter)
+            event_details = json.loads(event_details)
+            account_id = event['successfulSet'][0]['awsAccountId']
+            status_code = event['successfulSet'][0]['event']['statusCode']
+            event_details = json.dumps(describe_event_details(health_client, event_arn), default=myconverter)
+            event_details = json.loads(event_details)
+
+            # get non-organizational view requirements
+            affected_accounts = get_health_accounts(health_client, event, event_arn)
+            affected_entities = get_affected_entities(health_client, event_arn, affected_accounts, is_org_mode = False)
+
+            for parent_id in parent_ids:
+              for child_account in get_accounts_recursive(parent_id):
+                if status_code != "closed":
+                  event_type = "create"
+                else:
+                  event_type="resolve"
+                child_account_id = child_account['Id']
+                if child_account_id == account_id:
+                  if "none@domain.com" not in SENDER and RECIPIENT:
+                    try:
+                      print("Sending the alert to the emails")
+                      #get the list of resources from the array of affected entities
+                      resources = get_resources_from_entities(affected_entities)
+                      # send_email(event_details, event_type, affected_accounts, resources)
+                      send_email(event, event_type, affected_accounts, resources)
+                    except HTTPError as e:
+                      print("Got an error while sending message to Email: ", e.code, e.reason)
+                    except URLError as e:
+                      print("Server connection failed: ", e.reason)
+                      pass
+                  return {
+                    'è un account managed. invio notifica' : child_account_id,
+                    'organization unit' : parent_id
+                    # validate sender and recipient's email addresses
+                  }
             resources = get_resources_from_entities(affected_entities)
-            # send_email(event_details, event_type, affected_accounts, resources)
-            send_email(event, event_type, affected_accounts, resources)
-          except HTTPError as e:
-            print("Got an error while sending message to Email: ", e.code, e.reason)
-          except URLError as e:
-            print("Server connection failed: ", e.reason)
-            pass
-        return {
-          'è un account managed. invio notifica' : child_account_id,
-          'organization unit' : parent_id
-          # validate sender and recipient's email addresses
-        }
-  resources = get_resources_from_entities(affected_entities)
-  unmanaged_event_type="not_managed"
-  send_email(event, unmanaged_event_type, affected_accounts, resources)
-  return { 
-    'account non managed' : account_id
-  }
+            unmanaged_event_type="not_managed"
+            send_email(event, unmanaged_event_type, affected_accounts, resources)
+            return { 
+              'account non managed' : account_id
+            }
+      else:
+          print("No events found in time frame, checking again in 1 minute.")
 
 def get_accounts_recursive(parent_id):
   accounts = []

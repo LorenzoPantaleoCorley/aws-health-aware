@@ -6,6 +6,10 @@ lambda_function.zip
 # Local .terraform directories
 **/.terraform/*
 
+# ---> SAM
+# Local .aws-sam directories
+**/.aws-sam/*
+
 # .tfstate files
 *.tfstate
 *.tfstate.*

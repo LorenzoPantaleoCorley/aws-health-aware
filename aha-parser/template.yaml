@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  aha-parser
+
+  Sample SAM Template for aha-parser
+
+Parameters:
+  FromEmail:
+    Description: Enter FROM Email Address
+    Type: String
+    Default: none@domain.com
+    AllowedPattern: ^([\w+-.%]+@[\w-.]+\.[A-Za-z]+)(, ?[\w+-.%]+@[\w-.]+\.[A-Za-z]+)*$
+    ConstraintDescription: 'FromEmail is not a valid, please verify entry. If not sending to email, leave as the default, none@domain.com.'
+  ToEmail:
+    Description: >-
+      Enter email addresses separated by commas (for ex: abc@amazon.com,
+      bcd@amazon.com)
+    Type: String
+    Default: none@domain.com
+    AllowedPattern: ^([\w+-.%]+@[\w-.]+\.[A-Za-z]+)(, ?[\w+-.%]+@[\w-.]+\.[A-Za-z]+)*$
+    ConstraintDescription: 'ToEmail is not a valid, please verify entry. If not sending to email, leave as the default, none@domain.com.'   
+  Subject:
+    Description: Enter the subject of the email address
+    Type: String
+    Default: AWS Health Alert
+  AssumeRoleArn:
+    Description: Role to be assumed to access AWS services via STS
+    Type: String
+  EventSearchBack:
+    Description: How far back to search for events in hours. Default is 1 hour
+    Default: '1'
+    Type: Number
+
+Resources:
+  LambdaFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: parser/
+      Handler: notification-parser.main
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          FROM_EMAIL:
+            Ref: FromEmail
+          TO_EMAIL:
+            Ref: ToEmail
+          EMAIL_SUBJECT:
+            Ref: Subject
+          ASSUME_ROLE_ARN:
+            Ref: AssumeRoleArn
+          EVENT_SEARCH_BACK:
+            Ref: EventSearchBack
+      Tags:
+        map-migrated: d-server-00lmoisudlfo3c
+        business:abbreviation: AHA
+      Timeout: 300
+      Description: Lambda function to parse the notification event and send alert email
+      Policies:
+        - Statement:
+            - Sid: AllowOrg
+              Effect: Allow
+              Action:
+                - organizations:Describe*
+                - organizations:List*
+              Resource: '*'
+        - Statement:
+            - Sid: AllowSts
+              Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource: !Ref AssumeRoleArn
+        - Statement:
+            - Sid: AllowCWLogs
+              Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: 
+                - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+        - Statement:
+            - Sid: AllowSES
+              Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: 
+                - !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:*'
+      Events:
+        ScheduleEvent:
+          Type: ScheduleV2
+          Properties:
+            Description: Lambda trigger Event
+            ScheduleExpression: rate(1 minute)
+            State: ENABLED
+        EventBridgeRule:
+          Type: EventBridgeRule 
+          Properties:
+            Pattern:
+              source: 
+                - "aws.health"
+              detail-type: 
+                - "AWS Health Event"
+            State: ENABLED

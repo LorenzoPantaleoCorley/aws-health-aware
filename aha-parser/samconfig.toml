@@ -20,7 +20,7 @@ resolve_s3 = true
 s3_prefix = "aha-parser"
 region = "eu-central-1"
 profile = "846581533651_AWSAdministratorAccess"
-parameter_overrides = "Regions=\"eu-central-1\" AccountIDs=\"None\" EventSearchBack=\"1\" FromEmail=\"lpantaleo@tai.it\" ToEmail=\"lpantaleo@tai.it\" Subject=\"AWS Health Alert\" S3Bucket=\"bkt-aha-repo-e1\" AWSHealthEventType=\"issue | accountNotification | scheduledChange\""
+parameter_overrides = "FromEmail=\"lpantaleo@tai.it\" ToEmail=\"lpantaleo@tai.it\" Subject=\"AWS Health Alert\" AssumeRoleArn=\"arn:aws:iam::276209787992:role/cfn-aha-master-role-e1-AWSHealthAwareRoleForPHDEven-iMceyq7hJhB2\""
 image_repositories = []
 
 [default.package.parameters]

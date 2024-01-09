@@ -1,12 +1,8 @@
 import boto3, os, json
-
-############## INIZIO PARTE RIPRESA DA HANDLER ORIGINALE ##############
-
 from messagegenerator import get_message_for_email
-from urllib.request import Request, urlopen, URLError, HTTPError
-from datetime import datetime, timedelta
+from urllib.request import URLError, HTTPError
+from datetime import datetime
 from botocore.config import Config
-from botocore.exceptions import ClientError
 import socket
 # query active health API endpoint
 health_dns = socket.gethostbyname_ex('global.health.amazonaws.com')
@@ -20,8 +16,6 @@ RECIPIENT = os.environ['TO_EMAIL'].split(",")
 # AWS_REGION = os.environ['AWS_REGION']
 SUBJECT = os.environ['EMAIL_SUBJECT']
 
-############## FINE PARTE RIPRESA DA HANDLER ORIGINALE ##############
-
 orgs = boto3.client('organizations', region_name='eu-central-1')
 accounts_paginator = orgs.get_paginator('list_accounts_for_parent')
 ou_paginator = orgs.get_paginator('list_organizational_units_for_parent')
@@ -32,11 +26,14 @@ def main(event, context):
 
   # get event details
   health_client = get_sts_token('health')
-  event_arn = event['arn']
+  # event_arn = event['arn']
+  # account_id = event_details['successfulSet'][0]['awsAccountId']
+  # status_code = event['statusCode']
+  event_arn = event['successfulSet'][0]['event']['arn']
   event_details = json.dumps(describe_event_details(health_client, event_arn), default=myconverter)
   event_details = json.loads(event_details)
-  account_id = event_details['successfulSet'][0]['awsAccountId']
-  status_code = event['statusCode']
+  account_id = event['successfulSet'][0]['awsAccountId']
+  status_code = event['successfulSet'][0]['event']['statusCode']
   event_details = json.dumps(describe_event_details(health_client, event_arn), default=myconverter)
   event_details = json.loads(event_details)
 
@@ -57,7 +54,8 @@ def main(event, context):
             print("Sending the alert to the emails")
             #get the list of resources from the array of affected entities
             resources = get_resources_from_entities(affected_entities)
-            send_email(event_details, event_type, affected_accounts, resources)
+            # send_email(event_details, event_type, affected_accounts, resources)
+            send_email(event, event_type, affected_accounts, resources)
           except HTTPError as e:
             print("Got an error while sending message to Email: ", e.code, e.reason)
           except URLError as e:
@@ -68,6 +66,9 @@ def main(event, context):
           'organization unit' : parent_id
           # validate sender and recipient's email addresses
         }
+  resources = get_resources_from_entities(affected_entities)
+  unmanaged_event_type="not_managed"
+  send_email(event, unmanaged_event_type, affected_accounts, resources)
   return { 
     'account non managed' : account_id
   }

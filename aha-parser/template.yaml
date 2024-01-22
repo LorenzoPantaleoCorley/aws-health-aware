@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  aha-parser
+  AHA
 
-  Sample SAM Template for aha-parser
+  Sample SAM Template for AWS Health Aware customized solution
 
 Parameters:
   FromEmail:
@@ -23,7 +23,7 @@ Parameters:
   Subject:
     Description: Enter the subject of the email address
     Type: String
-    Default: AWS Health Alert
+    Default: AWS Health Custom Alert
   AssumeRoleArn:
     Description: Role to be assumed to access AWS services via STS
     Type: String
@@ -31,13 +31,45 @@ Parameters:
     Description: How far back to search for events in hours. Default is 1 hour
     Default: '1'
     Type: Number
+  Regions:
+    Description: >-
+      By default, AHA reports events affecting all AWS regions. 
+      If you want to report on certain regions you can enter up to 10 in a comma separated format.
+      Available Regions: us-east-1,us-east-2,us-west-1,us-west-2,af-south-1,ap-east-1,ap-south-1,ap-northeast-3,
+      ap-northeast-2,ap-southeast-1,ap-southeast-2,ap-northeast-1,ca-central-1,eu-central-1,eu-west-1,eu-west-2,
+      eu-south-1,eu-south-3,eu-north-1,me-south-1,sa-east-1,global
+    Default: all regions
+    AllowedPattern: ".+"
+    ConstraintDescription: No regions were entered, please read the documentation about selecting all regions or filtering on some.
+    Type: String
+  AWSHealthEventType:
+    Description: >-
+      Select the event type that you want AHA to report on. Refer to
+      https://docs.aws.amazon.com/health/latest/APIReference/API_EventType.html for more information on EventType.
+    Default: 'issue | accountNotification | scheduledChange'
+    AllowedValues:
+      - 'issue | accountNotification | scheduledChange'
+      - 'issue'
+    Type: String
+  # AccountIDs:
+  #   Description: >-
+  #     If you would like to EXCLUDE any accounts from alerting, upload a .csv file of comma-seperated account numbers to the same S3 bucket 
+  #     where the AHA.zip package is located. Sample AccountIDs file name: aha_account_ids.csv. If not, leave the default of None.
+  #   Default: None
+  #   Type: String
+  #   AllowedPattern: (None)|(.+(\.csv))$    
+  InScopeOus:
+    Description: >-
+      List of AWS Organization Units whose accounts are in scope to be monitored by this solution.
+    Type: String
 
 Resources:
   LambdaFunction:
     Type: AWS::Serverless::Function 
     Properties:
-      CodeUri: parser/
-      Handler: notification-parser.main
+      FunctionName: lmb-aha-cross-account-e0
+      CodeUri: handler/
+      Handler: aha-handler.main
       Runtime: python3.9
       Architectures:
         - x86_64
@@ -53,12 +85,36 @@ Resources:
             Ref: AssumeRoleArn
           EVENT_SEARCH_BACK:
             Ref: EventSearchBack
+          HEALTH_EVENT_TYPE:
+            Ref: AWSHealthEventType
+          REGIONS:
+            Ref: Regions
+          # ACCOUNT_IDS:
+          #   Ref: AccountIDs        
+          DYNAMODB_TABLE:
+            Ref: DynamoDBTable
+          IN_SCOPE_OUS:
+            Ref: InScopeOus
       Tags:
         map-migrated: d-server-00lmoisudlfo3c
         business:abbreviation: AHA
       Timeout: 300
       Description: Lambda function to parse the notification event and send alert email
       Policies:
+        - Statement:
+            - Sid: AllowDynamoDB
+              Effect: Allow
+              Action:
+                - dynamodb:UpdateTimeToLive
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:GetItem
+                - dynamodb:Scan
+                - dynamodb:Query
+                - dynamodb:UpdateItem
+                - dynamodb:UpdateTable
+                - dynamodb:GetRecords
+              Resource: !GetAtt DynamoDBTable.Arn
         - Statement:
             - Sid: AllowOrg
               Effect: Allow
@@ -89,18 +145,42 @@ Resources:
               Resource: 
                 - !Sub 'arn:aws:ses:${AWS::Region}:${AWS::AccountId}:*'
       Events:
-        ScheduleEvent:
-          Type: ScheduleV2
+        # EventBridgeRule:
+        #   Type: EventBridgeRule 
+        #   Properties:
+        #     Pattern:
+        #       source: 
+        #         - "aws.health"
+        #       detail-type: 
+        #         - "AWS Health Event"
+        #     State: ENABLED
+        EventBridgeSchedule:
+          Type: Schedule
           Properties:
             Description: Lambda trigger Event
-            ScheduleExpression: rate(1 minute)
-            State: ENABLED
-        EventBridgeRule:
-          Type: EventBridgeRule 
-          Properties:
-            Pattern:
-              source: 
-                - "aws.health"
-              detail-type: 
-                - "AWS Health Event"
-            State: ENABLED
+            Schedule: rate(1 minute)
+            Enabled: true
+
+  DynamoDBTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: example
+      AttributeDefinitions:
+        - AttributeName: arn
+          AttributeType: S
+      KeySchema:
+        - AttributeName: arn
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: TRUE        
+
+Outputs:
+  LambdaFunctionRoleName:
+    Value: !Ref LambdaFunction
+  LambdaFunctionName:
+    Value: !Ref LambdaFunctionRole
+

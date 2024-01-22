@@ -17,11 +17,12 @@ lint = true
 capabilities = "CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = true
 resolve_s3 = true
-s3_prefix = "aha-parser"
+s3_prefix = "cfn-aha-e0"
 region = "eu-central-1"
-profile = "846581533651_AWSAdministratorAccess"
-parameter_overrides = "FromEmail=\"lpantaleo@tai.it\" ToEmail=\"lpantaleo@tai.it\" Subject=\"AWS Health Alert\" AssumeRoleArn=\"arn:aws:iam::276209787992:role/cfn-aha-master-role-e1-AWSHealthAwareRoleForPHDEven-iMceyq7hJhB2\""
+profile = "258540651493_AWSAdministratorAccess"
+parameter_overrides = "FromEmail=\"TD.BOTAWSMailDispatcher@fastweb.it,TD.AWSTrustedAdvisor@fastweb.it\" ToEmail=\"TD.BOTAWSMailDispatcher@fastweb.it,TD.AWSTrustedAdvisor@fastweb.it,lpantaleo@tai.it\" Subject=\"AWS Health Alert\" AssumeRoleArn=\"arn:aws:iam::276209787992:role/rle-aha-cross-account-access-e0\" EventSearchBack=\"1\" Regions=\"eu-central-1,eu-south-1\" AWSHealthEventType=\"issue | accountNotification | scheduledChange\" InScopeOus=\"ou-37bl-nuoyhcb5,ou-37bl-b7dao3w9\""
 image_repositories = []
+stack_name = "cfn-aha-e0"
 
 [default.package.parameters]
 resolve_s3 = true

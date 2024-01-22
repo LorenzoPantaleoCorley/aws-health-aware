@@ -11,6 +11,7 @@ Resources:
     Properties:
       Description: "Grants access to PHD events"
       Path: /
+      RoleName: rle-aha-cross-account-access-e0
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -40,6 +41,7 @@ Resources:
               - Effect: Allow
                 Action:              
                   - organizations:ListAccounts
+                  - organizations:ListAccountsForParent
                   - organizations:ListAWSServiceAccessForOrganization
                   - organizations:DescribeAccount
                 Resource: "*"

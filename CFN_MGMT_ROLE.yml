@@ -18,7 +18,7 @@ Resources:
               - sts:AssumeRole
             Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:sts::${OrgMemberAccountId}:root'
+              AWS: !Sub 'arn:aws:iam::${OrgMemberAccountId}:root'
       Policies:
         - PolicyName: AllowHealthCalls
           PolicyDocument:
@@ -46,21 +46,3 @@ Resources:
 Outputs:
   AWSHealthAwareRoleForPHDEventsArn:
     Value: !GetAtt AWSHealthAwareRoleForPHDEvents.Arn
-
-
-# {
-#     "Version": "2012-10-17",
-#     "Statement": [
-#         {
-#             "Effect": "Allow",
-#             "Principal": {
-#                 "AWS": [
-#                     "arn:aws:sts::846581533651:assumed-role/test-role-4unq7czz/test",
-#                     "arn:aws:sts::846581533651:assumed-role/aha-parser-LambdaFunctionRole-TXQgeKIy9dPT/aha-parser-LambdaFunction-syHeIt2bOp56",
-#                     "arn:aws:iam::846581533651:root"
-#                 ]
-#             },
-#             "Action": "sts:AssumeRole"
-#         }
-#     ]
-# }

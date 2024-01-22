@@ -1,8 +1,8 @@
-# aha-parser
+# cfn-aha-e0
 
 This project contains source code and supporting files for a serverless application that you can deploy with the SAM CLI. It includes the following files and folders.
 
-- parser - Code for the application's Lambda function.
+- handler - Code for the application's Lambda function.
 - template.yaml - A template that defines the application's AWS resources.
 
 The application uses several AWS resources, including Lambda functions. These resources are defined in the `template.yaml` file in this project. You can update the template to add AWS resources through the same deployment process that updates your application code.
@@ -39,7 +39,7 @@ You can find your API Gateway Endpoint URL in the output values displayed after 
 Build your application with the `sam build --use-container` command.
 
 ```bash
-aha-parser$ sam build --use-container
+aha$ sam build --use-container
 ```
 
 The SAM CLI installs dependencies defined in `hello_world/requirements.txt`, creates a deployment package, and saves it in the `.aws-sam/build` folder.
